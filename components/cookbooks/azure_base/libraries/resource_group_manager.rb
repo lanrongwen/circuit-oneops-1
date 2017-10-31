@@ -24,12 +24,12 @@ module AzureBase
       @assembly = nsPathParts[2]
       @environment = nsPathParts[3]
       @platform_ci_id = node['workorder']['box']['ciId']
-      if !@service[:location].nil?
-        @location = @service[:location]
-      elsif !@service[:region].nil?
-        @location = @service[:region]
+      if !@service['location'].nil?
+        @location = @service['location']
+      elsif !@service['region'].nil?
+        @location = @service['region']
       end
-      @subscription = @service[:subscription]
+      @subscription = @service['subscription']
 
       @rg_name = get_name
       @resource_client = Fog::Resources::AzureRM.new(@creds)

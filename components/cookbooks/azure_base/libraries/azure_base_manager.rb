@@ -11,10 +11,10 @@ module AzureBase
                   :service
 
     def initialize(node)
-      @cloud_name = node[:workorder][:cloud][:ciName]
+      @cloud_name = node['workorder']['cloud']['ciName']
 
-      OOLog.info("App Name is: #{node[:app_name]}")
-      case node[:app_name]
+      OOLog.info("App Name is: #{node['app_name']}")
+      case node['app_name']
       when /keypair|secgroup|compute|volume/
         service_name = 'compute'
       when /fqdn/
@@ -28,15 +28,15 @@ module AzureBase
       OOLog.info("Service name is: #{service_name}")
 
       @service =
-        node[:workorder][:services][service_name][@cloud_name][:ciAttributes]
+        node['workorder']['services'][service_name][@cloud_name]['ciAttributes']
 
       if @creds.nil?
         OOLog.info("Creds do NOT exist, creating...")
         @creds = {
-            tenant_id: @service[:tenant_id],
-            client_id: @service[:client_id],
-            client_secret: @service[:client_secret],
-            subscription_id: @service[:subscription]
+            tenant_id: @service['tenant_id'],
+            client_id: @service['client_id'],
+            client_secret: @service['client_secret'],
+            subscription_id: @service['subscription']
         }
       else
         OOLog.info('Creds EXIST, no need to create.')

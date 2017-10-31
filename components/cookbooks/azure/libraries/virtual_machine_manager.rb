@@ -26,18 +26,18 @@ module AzureCompute
       @express_route_enabled = @compute_service['express_route_enabled']
       @secgroup_name = node['workorder']['payLoad']['DependsOn'][0]['ciName']
       @image_id = node['image_id'].split(':')
-      @size_id = node[:size_id]
+      @size_id = node['size_id']
       @ip_type = node['ip_type']
-      @platform = @compute_service[:ostype].include?('windows') ? 'windows' : 'linux'
+      @platform = @compute_service['ostype'].include?('windows') ? 'windows' : 'linux'
       @platform_ci_id = node['workorder']['box']['ciId']
       @compute_ci_id = node['workorder']['rfcCi']['ciId']
       @tags = {}
 
       @creds = {
-          tenant_id: @compute_service[:tenant_id],
-          client_secret: @compute_service[:client_secret],
-          client_id: @compute_service[:client_id],
-          subscription_id: @compute_service[:subscription]
+          tenant_id: @compute_service['tenant_id'],
+          client_secret: @compute_service['client_secret'],
+          client_id: @compute_service['client_id'],
+          subscription_id: @compute_service['subscription']
       }
 
       @compute_client = Fog::Compute::AzureRM.new(@creds)
