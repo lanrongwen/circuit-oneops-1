@@ -1,10 +1,12 @@
 COOKBOOKS_PATH="/opt/oneops/inductor/circuit-oneops-1/components/cookbooks"
+AZURE_TESTS_PATH="#{COOKBOOKS_PATH}/azure/test/integration/add/serverspec/tests"
 
 require_relative 'spec_helper'
-require "#{COOKBOOKS_PATH}/azure_base/test/integration/azure_spec_utils"
+require "#{COOKBOOKS_PATH}/azure_base/test/integration/spec_utils"
 
-provider = AzureSpecUtils.new($node).get_provider
+provider = SpecUtils.new($node).get_provider
 if provider =~ /azure/
-  require_relative './azure/add'
+  require "#{COOKBOOKS_PATH}/azure_base/test/integration/azure_spec_utils"
+  Dir.glob("#{AZURE_TESTS_PATH}/*.rb").each {|tst| require tst}
 end
 
