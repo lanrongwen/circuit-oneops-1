@@ -105,10 +105,6 @@ class AzureSpecUtils
       false
     end
   end
-  def get_provider
-    cloud_name = get_cloud_name
-    provider = @node['workorder']['services']['compute'][cloud_name]['ciClassName'].gsub("cloud.service.","").downcase.split(".").last
-  end
 
   def get_server_name
     rfcCi = get_rfc_ci
