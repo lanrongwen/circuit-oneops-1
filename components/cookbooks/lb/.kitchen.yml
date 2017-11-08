@@ -18,5 +18,4 @@ platforms:
           https_proxy: http://httpsproxy.com
 suites:
   - name: add
-    run_list:
-    attributes:
+  - name: delete
