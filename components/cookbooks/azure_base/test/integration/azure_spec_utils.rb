@@ -125,4 +125,34 @@ class AzureSpecUtils
 
     lb_name
   end
+  def get_azure_rule_definition(resource_group_name, network_security_group_name, rules, node)
+    sec_rules = []
+    priority = 100
+    reg_ex = /(\d+|\*|\d+-\d+)\s(\d+|\*|\d+-\d+)\s([A-Za-z]+|\*)\s\S+/
+    rules.each do |item|
+      raise "#{item} is not a valid security rule" unless reg_ex.match(item)
+      item2 = item.split(' ')
+      security_rule_access = Fog::ARM::Network::Models::SecurityRuleAccess::Allow
+      security_rule_description = node['secgroup']['description']
+      security_rule_source_addres_prefix = item2[3]
+      security_rule_destination_port_range = item2[1].to_s
+      security_rule_direction = Fog::ARM::Network::Models::SecurityRuleDirection::Inbound
+      security_rule_priority = priority
+      security_rule_protocol = case item2[2].downcase
+        when 'tcp'
+          Fog::ARM::Network::Models::SecurityRuleProtocol::Tcp
+        when 'udp'
+          Fog::ARM::Network::Models::SecurityRuleProtocol::Udp
+        else
+          Fog::ARM::Network::Models::SecurityRuleProtocol::Asterisk
+        end
+      security_rule_provisioning_state = nil
+      security_rule_destination_addres_prefix = '*'
+      security_rule_source_port_range = '*'
+      security_rule_name = network_security_group_name + '-' + priority.to_s
+      sec_rules << { name: security_rule_name, resource_group: resource_group_name, protocol: security_rule_protocol, network_security_group_name: network_security_group_name, source_port_range: security_rule_source_port_range, destination_port_range: security_rule_destination_port_range, source_address_prefix: security_rule_source_addres_prefix, destination_address_prefix: security_rule_destination_addres_prefix, access: security_rule_access, priority: security_rule_priority, direction: security_rule_direction }
+      priority += 100
+      end
+    sec_rules
+  end
 end
