@@ -17,24 +17,178 @@ Expose WORKORDER environment variable for kitchen/verifier/busser
 
 =end
 
+require "kitchen"
+require "kitchen/version"
+
+module Kitchen
+  class Instance
+    def converge_action
+      if !verifier[:transport].eql?("local")
+        banner "Converging #{to_str}..."
+
+        elapsed = action(:converge) do |state|
+          if legacy_ssh_base_driver?
+            legacy_ssh_base_converge(state)
+          else
+            provisioner.call(state)
+          end
+        end
+        info("Finished converging #{to_str} #{Util.duration(elapsed.real)}.")
+      else
+        banner "Skipping converging step"
+      end
+      self
+    end 
+
+    def legacy_ssh_base_setup(state)
+      warn("Running legacy setup for '#{driver.name}' Driver")
+      # TODO: Document upgrade path and provide link
+      # warn("Driver authors: please read http://example.com for more details.")
+      if !verifier[:transport].eql?("local")
+        driver.setup(state)
+      else
+        banner "Skipping #{driver.name}  setup step"
+      end
+    end
+  end
+end 
+
+
+module Kitchen
+  module Driver
+    class Proxy < Kitchen::Driver::SSHBase
+      def reset_instance(state)
+        if config[:transport] && config[:transport].eql?("local")
+          info("Transport mode #{config[:transport]} so no-ops")
+        else
+          if cmd = config[:reset_command]
+            info("Resetting instance state with command: #{cmd}")
+            ssh(build_ssh_args(state), cmd)
+          end
+        end
+      end
+    end
+  end
+end
+
+module Kitchen
+  module Verifier
+    class Base
+      include Configurable
+      include Logging
+      include ShellOut
+
+      def call(state)
+        create_sandbox
+
+        if config[:transport] && config[:transport].eql?("local")
+          sh = Mixlib::ShellOut.new(run_command)
+          sh.run_command
+          sh.stdout
+          sh.error!
+        else
+          sandbox_dirs = Dir.glob(File.join(sandbox_path, "*"))
+          instance.transport.connection(state) do |conn|
+            conn.execute(install_command)
+            conn.execute(init_command)
+            info("Transferring files to #{instance.to_str}")
+            conn.upload(sandbox_dirs, config[:root_path])
+            debug("Transfer complete")
+            conn.execute(prepare_command)
+            conn.execute(run_command)
+          end
+       end
+      rescue Kitchen::Transport::TransportFailed => ex
+        raise ActionFailed, ex.message
+      ensure
+        cleanup_sandbox
+      end
+    end
+  end
+end
+
+
+module Kitchen
+  module Driver
+    class SSHBase
+      def verify(state)
+        verifier = instance.verifier
+        verifier.create_sandbox
+        sandbox_dirs = Dir.glob(File.join(verifier.sandbox_path, "*"))
+ 
+        if config[:transport] && config[:transport].eql?("local")
+          banner "Running verifier locally"
+          debug("#{verifier.run_command}")
+          sh = Mixlib::ShellOut.new(verifier.run_command)
+          sh.run_command
+          sh.stdout
+          sh.error!
+        else
+          instance.transport.connection(backcompat_merged_state(state)) do |conn|
+            conn.execute(env_cmd(verifier.init_command))
+            info("Transferring files to #{instance.to_str}")
+            conn.upload(sandbox_dirs, verifier[:root_path])
+            debug("Transfer complete")
+            conn.execute(env_cmd(verifier.prepare_command))
+            conn.execute(env_cmd(verifier.run_command))
+          end
+        end
+      rescue Kitchen::Transport::TransportFailed => ex
+        raise ActionFailed, ex.message
+      ensure
+        instance.verifier.cleanup_sandbox
+      end
+    end
+  end
+end
+
 require "kitchen/verifier/busser"
 
 module Kitchen
   module Verifier
-    class Busser < Kitchen::Verifier::Base
-      def busser_env
-        root = config[:root_path]
-        gem_home = gem_path = remote_path_join(root, "gems")
-        gem_cache = remote_path_join(gem_home, "cache")
+    class Busser
+    def busser_env
+        root = config[:sandbox] ? config[:sandbox] : config[:root_path] 
+        busser_root = config[:busser_root] ? config[:busser_root] : root
+        gem_home = config[:gem_home] ? config[:gem_home] : remote_path_join(root, "gems")
+        gem_path = config[:gem_path] ? config[:gem_path] : remote_path_join(root, "gems")
+        gem_cache = config[:gem_cache] ? config[:gem_cache] : remote_path_join(root, "cache")
 
-        [
-          shell_env_var("BUSSER_ROOT", root),
-          shell_env_var("GEM_HOME", gem_home),
-          shell_env_var("GEM_PATH", gem_path),
-          shell_env_var("GEM_CACHE", gem_cache),
-          shell_env_var("WORKORDER", ENV['WORKORDER'])
-        ].join("\n")
+        if config[:transport] && config[:transport].eql?("local")
+          [
+            shell_env_var("BUSSER_ROOT", busser_root),
+            shell_env_var("WORKORDER", ENV['WORKORDER'])
+          ].join("\n")
           .tap { |str| str.insert(0, reload_ps1_path) if windows_os? }
+        else
+          [
+            shell_env_var("BUSSER_ROOT", busser_root),
+            shell_env_var("GEM_HOME", gem_home),
+            shell_env_var("GEM_PATH", gem_path),
+            shell_env_var("GEM_CACHE", gem_cache),
+            shell_env_var("WORKORDER", ENV['WORKORDER'])
+          ].join("\n")
+          .tap { |str| str.insert(0, reload_ps1_path) if windows_os? }
+        end
+      end
+
+      def run_command
+        return if local_suite_files.empty?
+        if config[:transport] && config[:transport].eql?("local")
+          config[:sandbox] = sandbox_path
+        end
+
+        if config[:sudo] && config[:sudo].eql?("false")
+          cmd = config[:busser_bin].dup
+                                       .tap { |str| str.insert(0, "& ") if powershell_shell? }
+        else
+          cmd = sudo(config[:busser_bin]).dup
+                                       .tap { |str| str.insert(0, "& ") if powershell_shell? }
+        end
+
+        prefix_command(<<-CMD).chomp
+          #{busser_env} ; #{cmd} test #{plugins.join(" ").gsub!("busser-", "")}
+        CMD
       end
     end
   end
